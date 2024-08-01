@@ -15,7 +15,7 @@ fn main() -> Result<()> {
 
     for template in templates {
         let verbs = get_verbs(&conn, &template.verb_types, verbose)?;
-        let nouns = get_nouns(&conn, template.noun_count, verbose)?;
+        let nouns = get_nouns(&conn, &template.noun_types, verbose)?;
 
         let ainu_sentence = (template.generate_ainu)(&verbs.0, &nouns.0);
         let jpan_sentence = (template.generate_jpan)(&verbs.1, &nouns.1, &verbs.2);
@@ -80,16 +80,16 @@ fn build_verb_query(verb_types: &[u8]) -> String {
     format!("{} ORDER BY RANDOM() LIMIT {}", query, verb_types.len())
 }
 
-fn get_nouns(conn: &Connection, noun_count: usize, verbose: usize) -> Result<(Vec<String>, Vec<String>)> {
+fn get_nouns(conn: &Connection, noun_types: &[String], verbose: usize) -> Result<(Vec<String>, Vec<String>)> {
     let mut nouns_ainu = Vec::new();
     let mut nouns_jpan = Vec::new();
-    let query = &format!("SELECT ainu, jpan FROM nouns ORDER BY RANDOM() LIMIT {}", noun_count);
+    let query = &format!("SELECT ainu, jpan FROM nouns ORDER BY RANDOM() LIMIT {}", noun_types.len());
 
     if verbose != 0 {
         println!("{}", query);
     }
 
-    if noun_count > 0 {
+    if noun_types.len() > 0 {
         let mut stmt = conn.prepare(&query)?;
         let mut rows = stmt.query(params![])?;
 
