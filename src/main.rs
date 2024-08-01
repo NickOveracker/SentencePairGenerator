@@ -11,17 +11,20 @@ fn main() -> Result<()> {
     let verbose: usize = args.get(2).map_or(0, |n| n.parse::<usize>().expect("args[2] must be int"));
     let conn = Connection::open(db_path)?;
 
-    let templates = get_templates();
+    let mut index = 0;
 
-    for template in templates {
-        let verbs = get_verbs(&conn, &template.verb_types, verbose)?;
-        let nouns = get_nouns(&conn, &template.noun_types, verbose)?;
+    for _ in 0..1000 {
+        let templates = get_templates();
+        for template in templates {
+            let verbs = get_verbs(&conn, &template.verb_types, verbose)?;
+            let nouns = get_nouns(&conn, &template.noun_types, verbose)?;
 
-        let ainu_sentence = (template.generate_ainu)(&verbs.0, &nouns.0);
-        let jpan_sentence = (template.generate_jpan)(&verbs.1, &nouns.1, &verbs.2);
+            let ainu_sentence = (template.generate_ainu)(&verbs.0, &nouns.0);
+            let jpan_sentence = (template.generate_jpan)(&verbs.1, &nouns.1, &verbs.2);
 
-        println!("{}", ainu_sentence);
-        println!("{}", jpan_sentence);
+            println!("{}\t{}\t{}", index, ainu_sentence, jpan_sentence);
+            index = index + 1;
+        }
     }
 
     Ok(())
@@ -31,13 +34,15 @@ fn get_verbs(conn: &Connection, verb_types: &[u8], verbose: usize) -> Result<(Ve
     let mut verbs_ainu = Vec::new();
     let mut verbs_jpan = Vec::new();
     let mut particles  = Vec::new();
-    let query = build_verb_query(verb_types);
+    let mut query : String;
 
-    if verbose != 0 {
-        println!("{}", query);
-    }
+    for verb_type in verb_types {
+        query = build_verb_query(*verb_type);
 
-    if verb_types.len() > 0 {
+        if verbose != 0 {
+            println!("{}", query);
+        }
+
         let mut stmt = conn.prepare(&query)?;
         let mut rows = stmt.query(params![])?;
 
@@ -51,21 +56,19 @@ fn get_verbs(conn: &Connection, verb_types: &[u8], verbose: usize) -> Result<(Ve
     Ok((verbs_ainu, verbs_jpan, particles))
 }
 
-fn build_verb_query(verb_types: &[u8]) -> String {
+fn build_verb_query(verb_type: u8) -> String {
     let mut conditions = Vec::new();
     let mut needs_particle: bool = false;
 
-    for &verb_type in verb_types {
-        for ii in 0..4 {
-            if (verb_type >> 4 & (1 << ii)) != 0 {
-                if ii > 1 {
-                    needs_particle = true;
-                }
+    for ii in 0..4 {
+        if (verb_type >> 4 & (1 << ii)) != 0 {
+            if ii > 1 {
+                needs_particle = true;
+            }
 
-                for jj in 0..3 {
-                    if (verb_type & (1 << jj)) != 0 {
-                        conditions.push(format!("trans = {} AND plur = {}", ii, jj));
-                    }
+            for jj in 0..3 {
+                if (verb_type & (1 << jj)) != 0 {
+                    conditions.push(format!("trans = {} AND plur = {}", ii, jj));
                 }
             }
         }
@@ -77,19 +80,24 @@ fn build_verb_query(verb_types: &[u8]) -> String {
         query = format!("{} AND particle <> ''", query);
     }
 
-    format!("{} ORDER BY RANDOM() LIMIT {}", query, verb_types.len())
+    format!("{} ORDER BY RANDOM() LIMIT 1", query)
 }
 
-fn get_nouns(conn: &Connection, noun_types: &[String], verbose: usize) -> Result<(Vec<String>, Vec<String>)> {
+fn get_nouns(conn: &Connection, noun_types: &[(String, String)], verbose: usize) -> Result<(Vec<String>, Vec<String>)> {
     let mut nouns_ainu = Vec::new();
     let mut nouns_jpan = Vec::new();
-    let query = &format!("SELECT ainu, jpan FROM nouns ORDER BY RANDOM() LIMIT {}", noun_types.len());
+    let mut query : String;
 
-    if verbose != 0 {
-        println!("{}", query);
-    }
+    for noun_type in noun_types {
+        query = format!(
+            "SELECT ainu, jpan FROM nouns WHERE cat1 LIKE '{}' OR cat2 LIKE '{}' ORDER BY RANDOM() LIMIT 1",
+            noun_type.0, noun_type.1
+        );
 
-    if noun_types.len() > 0 {
+        if verbose != 0 {
+            println!("{}", query);
+        }
+
         let mut stmt = conn.prepare(&query)?;
         let mut rows = stmt.query(params![])?;
 
